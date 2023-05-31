@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+		xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout">
+<head>
+    <meta charset="UTF-8">
+    <title>index.html</title>
+</head>
+<body>
+
+<script th:src="@{/js/jquery-3.6.4.min.js}"></script>
+
+<script type="text/javascript">
+	function changeMigrationScreen(){
+		const type = $("input[name='migType']:checked").val();
+		const path = '/migration/screen/getBaseData';
+		//alert("path=" + path);
+		const param = {
+        	migType : type
+    	}	
+    		
+		$.ajax({
+				url: path,
+				type: 'POST',
+				data: param,
+				}).done((response) => {
+					//alert("response=" + response);
+					$('#workerScreen').html(response);
+				});
+		
+		//$.post(path, $("mainForm").serialize());
+	}
+</script>
+
+<h1 th:text="'BD 공정관리 프로젝트 Migration 도구'"></h1> 
+
+<th:block layout:fragment="content">
+
+<form role="form"id="mainForm">	
+	<div>
+		<table border = 1 >
+			<tr>
+				<tr>
+					<td>			
+						<label>Migration 실행 대상</label>
+					</td>					
+					<td>
+						<input type="radio" id="migType1" name="migType" value="auth" th:checked="checked">
+        				<label for="auth">저자와 시간 정보</label>
+						<input type="radio" id="migType2" name="migType" value="hist">
+        				<label for="auth">일감별 이력 정보</label>        				
+					</td>
+
+					<td>
+						<button type="button" onclick="changeMigrationScreen()">선택된 대상의 처리 화면 보이기</button>
+					</td>
+				</tr>					
+			</tr>
+		</table>		
+	</div>
+</form>	
+<div id="workerScreen" name="workerScreen">
+</div>
+</th:block>
+
+</body>
+</html>		

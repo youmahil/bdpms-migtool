@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bd.redminetools.migration.mapper.MigrationMapper">
+	<!-- 저널 원본 -->
+	<select id="selectJournals" resultType="com.bd.redminetools.migration.domain.Journals">
+		SELECT DISTINCT 
+				B.id 					as oldJournalId 		-- 저널 PK이면서, 저널 Detail 개별 항목의 journal_id
+				, A.j_b_id				as journalizedId 
+				, A.j_a_id				as oldJournalizedId 
+				, B.journalized_type	as journalizedType 
+				, B.user_id				as userId 
+				, B.notes				as notes 
+				, B.created_on			as createdOn 
+				, B.private_notes		as privateNotes 
+		FROM 
+				( 
+					SELECT DISTINCT 
+						IA.subject			as subject 			-- 제목
+						, IA.id				as j_a_id 			-- 기존 ID
+						, IA.author_id		as j_a_aut 			-- 기존 저자
+						, IB.author_id		as j_b_aut 			-- 복제 후 일괄변경된 저자
+						, IB.id				as j_b_id 			-- 복제 후 새로 채번된 일감 ID
+						, IA.journals_id	as j_a_journals_id 	-- 기존 저널 ID
+					FROM 
+						( 
+							SELECT 
+								IIA.id 
+								, IIA.subject 
+								, IIA.author_id 
+								, IIB.id	as journals_id 
+							FROM 
+								issues IIA 
+								, journals IIB 
+							WHERE 
+								IIA.project_id = #{sourceProjectId} -- 원본 프로젝트 ID
+							AND 
+								IIA.id = IIB.journalized_id 
+						) IA, 
+						( 
+							SELECT 
+								id 
+								, subject 
+								, author_id 
+							FROM 
+								issues 
+							WHERE 
+								project_id = #{targetProjectId}		-- 복사본 프로젝트 ID
+							AND 
+								str_to_date(created_on , '%Y-%m-%d %H:%i') 
+									= str_to_date( #{copyTimeStr} , '%Y-%m-%d %H:%i')  -- 복제 수행 시간								
+						) IB 
+					WHERE 
+						IA.subject = IB.subject 
+		 	) A 
+		 	, journals B 
+		WHERE 
+			A.j_a_id = B.journalized_id
+	</select>
+		
+	<!-- 동일한 저널의 기 존재 여부 확인 -->
+	<select id="selectSameJournalCount" resultType="int">
+		SELECT 
+			count(1) as existCount
+		FROM 
+			journals
+		WHERE 
+			journalized_id = #{journalizedId}
+		AND
+			journalized_type = #{journalizedType}
+		AND
+			user_id = #{userId}
+		AND
+			notes = #{notes}
+		AND
+			created_on = str_to_date(#{createdOn}  , '%Y-%m-%d %H:%i:%s')
+		AND
+			private_notes = #{privateNotes}		
+	</select>
+	
+	<!-- 저널 복사본 -->	
+	<insert id="insertJournal">
+		INSERT INTO journals 
+			(
+				journalized_id
+				, journalized_type
+				, user_id
+				, notes
+				, created_on
+				, private_notes
+			) 
+		VALUE 
+			(
+				#{journalizedId}
+				, #{journalizedType}
+				, #{userId}
+				, #{notes}
+				, str_to_date(#{createdOn} , '%Y-%m-%d %H:%i:%s')
+				, #{privateNotes}
+			) 
+	</insert>
+	
+	<!-- 저널 복사본에 새로 할당된 Id 값 추출 -->		
+	<select id="selectLastJournalId" resultType="int">
+		SELECT max(id) as id FROM journals WHERE journalized_id = #{journalizedId}
+	</select>
+	
+	<!-- 저널상세 원본 추출 -->
+	<select id="selectOldDetails" resultType="com.bd.redminetools.migration.domain.JournalDetails">
+		SELECT 
+			id				as id
+			, journal_id	as journalId
+			, property		as property
+			, prop_key		as propKey
+			, old_value		as oldValue 
+			, value			as value
+		FROM 
+			journal_details 
+		WHERE 
+			journal_id = #{oldJournalId} 
+	</select>
+	
+	<!-- 저널상세 복사본 만들기 -->
+	<insert id="insertJournalDetails">
+		INSERT INTO journal_details 
+			(
+				journal_id
+				, property
+				, prop_key
+				, old_value
+				, value
+			) 
+		VALUES 
+			(
+				#{journalId}
+				, #{property} 
+				, #{propKey} 
+				, #{oldValue} 
+				, #{value}
+			)
+	</insert>
+	
+	<!-- 기존 프로젝트의 일감 별 저자, 상태, 저작시간 정보를, 새 프로젝트의 제목으로 Matching되는 각각의 일감으로 복사 -->
+	<update id="updateAuthoringInfo">
+		UPDATE 
+			issues A 	-- 변경 대상 테이블
+		 , ( 		  	-- 기준 테이블 : SELECT 된 조건에 부합하는 데이터
+			SELECT 
+				IA.subject				as j_subject  -- 제목
+				, IA.id					as j_a_id  	  -- 기존 ID
+		 		, IA.author_id			as j_a_aut 	  -- 기존 저자
+		 		, IA.assigned_to_id		as j_a_ass	  -- 기존 담당자
+				, IB.author_id			as j_b_aut 	  -- 복제 후 일괄변경된 저자
+				, IA.status_id			as j_a_sta 	  -- 기존 상태
+				, IB.status_id			as j_b_sta 	  -- 복제 후 일괄변경된 상태
+				, IA.created_on			as j_a_crdt   -- 기존 시간
+				, IB.created_on			as j_b_crdt   -- 복제 후 일괄변경된 시간
+				, IB.id					as j_b_id 	  -- 복제 후 새로 채번된 일감 ID
+			FROM 
+				( 
+					SELECT 
+						id 
+						, subject 
+						, author_id 
+						, assigned_to_id
+						, status_id 
+						, created_on 
+					FROM 
+						issues 
+					WHERE 
+						project_id = #{sourceProjectId} 	-- 원본 프로젝트 ID
+				) IA , 
+				( 
+					SELECT 
+						id 
+						, subject 
+						, author_id 
+						, assigned_to_id
+						, status_id 
+						, created_on 
+					FROM 
+						issues 
+					WHERE 
+						author_id = #{copyExecuteUserId} 	-- 복제를 실행한 사용자의 ID
+					AND 
+						project_id = #{targetProjectId}		-- 복사본 프로젝트 ID
+					AND 
+						str_to_date(created_on , '%Y-%m-%d %H:%i:%s') >= str_to_date( #{copyTimeStr} , '%Y-%m-%d %H:%i:%s')  -- 복제 수행 시간
+				) IB 
+			WHERE 
+				IA.subject = IB.subject 
+			) B 
+		SET 
+			A.author_id = B.j_a_aut  		-- 기존 저자로 갱신
+			, A.assigned_to_id = B.j_a_ass	-- 기존 담당자로 갱신
+			, A.status_id = B.j_a_sta 		-- 기존 상태로 갱신
+			, A.created_on = B.j_a_crdt 	-- 기존 시간으로 갱신
+		WHERE 
+			A.id = B.j_b_id ;				-- 변경 대상의 ID는 복제 후 새로 채번된 ID
+	</update>	
+</mapper>

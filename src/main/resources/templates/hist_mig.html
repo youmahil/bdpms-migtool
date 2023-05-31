@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+		xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout">
+<head>
+    <meta charset="UTF-8">
+    <title>hist_mig.html</title>
+</head>
+<body>
+
+<script th:src="@{/js/jquery-3.6.4.min.js}"></script>
+
+<script type="text/javascript">
+	// 복사본 프로젝트 선택 변경 시 시간값 목록 변경 처리
+	function changeCopyTimeList() {		    
+		var selectedValue = $("#targetProjectId option:selected").val();
+		const path = '/screen/getTimeList?id=' + selectedValue;
+		
+	    $.ajax({
+	        url: path,
+	        type:"GET",
+	        success:function(data){
+				alert("복사를 수행한 기준 시간를 선택해 주세요.");
+	            // Resetting select option
+	            var select = document.getElementById("copyTimeStr");
+	            select.options.length = 0;
+	
+	            options = data.options;
+
+	            for (var i = 0; i < data.length; i++) {
+	                select.options[select.options.length] = new Option(data[i],i);
+	            }
+	            for (var i = 0; i < select.childElementCount; i++) {
+	                console.log(select.options[i]);
+	            }
+				select.focus();
+	        },error:function (error) {
+	            console.log(error);
+	        }
+	
+	    });
+	}
+		
+	// 일감 이력 Migration 실행 처리	
+	function executeMigration(){
+		const sourceProjectId = $('#sourceProjectId').val();
+		const targetProjectId = $('#targetProjectId').val();
+		const copyTimeStr = $("#copyTimeStr option:selected").text();
+		
+		const path = '/migration/api/issuesHistoryMigration';
+		const json = JSON.stringify({
+					'sourceProjectId': sourceProjectId,
+					'targetProjectId': targetProjectId,
+					'copyTimeStr': copyTimeStr
+				});
+		
+		$('#migResult').text("Migration 실행중...");
+				
+		$.ajax({
+			url: path,
+			type: 'POST',
+			contentType: 'application/json',
+			data: json,
+			}).done((response) => {
+				if (response == 'success') {
+					alert('Migration 성공');
+					$('#migResult').text("Migration 성공 / 공정관리 도구에서 해당 일감 이력 정보 확인 요망")
+				} else {
+					alert('Migration 실패');
+					$('#migResult').text("Migration 실패 / 이미 Migration이 완료되었거나, 선택한 조건이 부합하지 않는 조건인지 여부를 확인 요망")
+				}
+			});
+
+	}
+</script>
+
+<h2 th:text="'*** 일감별 이력 정보 Migration'"></h2> 
+<p>
+<h4><font color="red">주의 : 시간 목록 중 프로젝트 복사를 수행했던 시간 값이 없으면, 이미 Migration 완료된 상태이므로, Migration을 실행하지 마십시오.<br/> 
+<h5> ##### 프로젝트와 시간 값을 지정하여 강제로 실행 시, 선택하신 프로젝트와 시간 값을 가진 이력 데이터가 중복될 수 있으니 주의 바랍니다. ##### </h5></font></h4>
+</p>
+<th:block layout:fragment="content">
+	<div>
+		<table border = 1>
+			<tr>				
+				<tr>
+					<td>
+						<label>원본&nbsp;&nbsp;&nbsp;&nbsp;프로젝트</label>
+					</td>
+					<td>
+						<select class="select" name="sourceProjectId" id="sourceProjectId">
+							<option th:each="projectsData : ${projects}" th:value="${projectsData.id}" th:text="${projectsData.name}"></option>
+						</select><i></i>
+					</td>
+				</tr>
+				<tr>		
+					<td>		
+						<label>복사본 프로젝트</label>
+					</td>
+					<td>				
+						<select class="select" name="targetProjectId" id="targetProjectId" onchange="changeCopyTimeList()">
+							<option th:each="projectsData : ${projects}" th:value="${projectsData.id}" th:text="${projectsData.name}"></option>
+						</select><i></i>
+					</td>
+				</tr>
+				
+				<tr>
+					<td>			
+						<label>복사&nbsp;&nbsp;&nbsp;&nbsp;실행시간</label>
+					</td>
+					<td>						
+						<select class="select" name="copyTimeStr" id="copyTimeStr">
+							<option th:selected="true" th:disabled="true" th:text="'복사를 수행한 기준 시간를 선택해 주세요.'"></option>
+						</select><i></i>						
+					</td>
+				</tr>				
+			</tr>	
+	
+			<tr>			
+				<td>			
+					<label>Migration 실행</label>
+				</td>
+				<td>					
+					<button type="button" onclick="executeMigration()">Migration 실행</button>
+				</td>	
+			</tr>
+	
+			<tr>		
+				<td>			
+					<label>Migration 진행 메시지</label>
+				</td>
+				<td>					
+					<label id="migResult" name="migResult">Migration 준비</label>
+				</td>
+			</tr>
+		</table>		
+	</div>
+</th:block>
+
+</body>
+</html>

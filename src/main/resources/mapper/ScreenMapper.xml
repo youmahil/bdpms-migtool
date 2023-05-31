@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bd.redminetools.migration.mapper.ScreenMapper">
+	<!-- 프로젝트 목록 -->
+	<select id="selectProjects" resultType="com.bd.redminetools.migration.domain.Project">
+		SELECT
+			id		as id
+			, name	as name
+		FROM
+			projects
+		ORDER BY
+			name	ASC
+	</select>
+	
+	<!-- 활성 사용자 목록 -->
+	<select id="selectActiveUsers" resultType="com.bd.redminetools.migration.domain.User">
+		<![CDATA[ 
+			SELECT
+				id			as id
+				, login		as login
+				, firstname	as name
+			FROM
+				users
+			WHERE	
+				type = 'User'
+			AND
+				login <> ''
+			AND
+				status = 1
+		]]>
+	</select>
+	
+	<!-- 선택된 복사본 프로젝트에 소속된 일감들의 생성시간 목록 -->
+	<select id="selectTargetIssuesTimeList"  resultType="java.lang.String">
+		SELECT DISTINCT 
+			str_to_date(created_on , '%Y-%m-%d %H:%i') as copyTimeStr
+		FROM 
+			issues 
+		WHERE 
+			project_id = #{targetProjectId}		-- 복사본 프로젝트 ID
+		ORDER BY
+			copyTimeStr DESC
+	</select>
+</mapper>
